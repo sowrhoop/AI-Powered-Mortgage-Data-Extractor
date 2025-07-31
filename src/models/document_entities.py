@@ -17,9 +17,10 @@ class MortgageDocumentEntities:
     """
     DocumentType: str = "N/A"
     BorrowerNames: List[str] = field(default_factory=list) # List of borrower full names
+    BorrowerAddress: str = "N/A" # Added: Borrower's current residing address
     LenderName: str = "N/A"
     TrusteeName: str = "N/A" # "N/A" if Mortgage
-    TrusteeAddress: str = "N/A" # "N/A" if Mortgage
+    TrusteeAddress: str = "N/A" # Added: Trustee Address, "N/A" if Mortgage
     LoanAmount: str = "N/A"
     PropertyAddress: str = "N/A"
     DocumentDate: str = "N/A"

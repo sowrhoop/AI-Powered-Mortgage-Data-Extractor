@@ -3,30 +3,27 @@ import sys
 import time
 import keyboard
 import tkinter as tk
-from tkinter import ttk # Import ttk for themed widgets
+from tkinter import ttk
 import logging
 import subprocess
-import threading # Import threading module
-from tkinter import messagebox # Import messagebox for user-friendly error pop-ups
-from typing import List # Import List for type hinting
+import asyncio
+from tkinter import messagebox
+from typing import List, Optional
+from PIL import Image
+from io import BytesIO
+import base64
 
-# Configure logging for the application
 from utils.logging_config import setup_logging
 setup_logging()
 logger = logging.getLogger(__name__)
 
-# Import configuration and services
-from config import AZURE_VISION_KEY, AZURE_VISION_ENDPOINT, OPENAI_API_KEY, HOTKEYS, OUTPUT_FILE_NAME
+from config import OPENAI_API_KEY, HOTKEYS, OUTPUT_FILE_NAME
 from services.capture_service import ScreenshotCapture
-from services.ocr_service import OCRService
 from services.ai_analysis_service import AIAnalysisService
 from ui.results_window import ResultsWindow
-# Removed: from ui.processing_window import ProcessingWindow # No longer needed
 from utils.common_utils import get_base_path, get_dpi_scale_factor, is_admin, run_as_admin
-from models.document_entities import AnalysisResult, MortgageDocumentEntities # Import for default error result
+from models.document_entities import AnalysisResult, MortgageDocumentEntities
 
-# Make the application DPI-aware for accurate screen capture on high DPI displays
-# This helps ensure that the captured region matches the visual selection
 try:
     import ctypes
     ctypes.windll.user32.SetProcessDPIAware()
@@ -34,199 +31,175 @@ try:
 except AttributeError:
     logger.warning("Failed to set process DPI aware. Screen capture accuracy might be affected on high DPI displays.")
 
-
 class MortgageDocumentAnalyzerApp:
-    """
-    Main application class for the Mortgage Document Analyzer.
-    Manages the UI, hotkey listeners, and orchestrates the document analysis workflow.
-    """
     def __init__(self):
         logger.info("Initializing MortgageDocumentAnalyzerApp...")
         self.root = tk.Tk()
-        self.root.withdraw() # Hide the main Tkinter window
+        self.root.withdraw()
 
-        self.all_analysis_results: List[AnalysisResult] = [] # Stores results of all analyses
+        self.all_analysis_results: List[AnalysisResult] = []
 
         self.dpi_scale_factor = get_dpi_scale_factor()
         logger.info(f"Detected DPI Scale Factor: {self.dpi_scale_factor}")
 
-        # Initialize services
         self.screenshot_capture = ScreenshotCapture(self.root, self.dpi_scale_factor)
-        self.ocr_service = OCRService(AZURE_VISION_ENDPOINT, AZURE_VISION_KEY)
-        self.ai_analysis_service = AIAnalysisService(OPENAI_API_KEY)
+        self.ai_analysis_service: Optional[AIAnalysisService] = None
+        self.results_window: Optional[ResultsWindow] = None
 
-        self.results_window: ResultsWindow = None # Will be initialized when results are ready
-        # Removed: self.processing_window: ProcessingWindow = ProcessingWindow(self.root) # No longer needed
+        try:
+            self.loop = asyncio.get_running_loop()
+        except RuntimeError:
+            self.loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(self.loop)
+        logger.info("Asyncio event loop initialized in the main thread.")
 
+        self._integrate_asyncio_with_tkinter()
         self._setup_hotkeys()
         logger.info(f"Application initialized. Listening for hotkeys: {', '.join(HOTKEYS)}")
 
-        # Check if API keys are configured
-        if not self.ocr_service.is_configured or not self.ai_analysis_service.is_configured:
+        self.loop.create_task(self._init_async_services())
+        self.root.after(100, self._check_api_configs)
+
+        # ✅ Show ResultsWindow UI immediately with a dummy result
+        dummy_result = AnalysisResult(
+            entities=MortgageDocumentEntities(),
+            summary="",
+            error=None,
+            document_id="Document_0"
+        )
+        self.all_analysis_results.append(dummy_result)
+        self._manage_results_window_visibility(show=True, update_data=True)
+
+    def _integrate_asyncio_with_tkinter(self):
+        def run_async_tasks():
+            self.loop.call_soon(self.loop.stop)
+            self.loop.run_forever()
+            self.root.after(10, run_async_tasks)
+        logger.info("Integrating asyncio event loop with Tkinter main loop.")
+        self.root.after(10, run_async_tasks)
+
+    async def _init_async_services(self):
+        self.ai_analysis_service = AIAnalysisService(OPENAI_API_KEY)
+        logger.info("AIAnalysisService initialized asynchronously.")
+
+    def _check_api_configs(self):
+        if self.ai_analysis_service is None:
+            self.root.after(100, self._check_api_configs)
+            return
+        if not self.ai_analysis_service.is_configured:
             messagebox.showerror(
                 "Configuration Error",
-                "Azure Vision API Key or Endpoint, or OpenAI API Key is missing. "
-                "Please set the environment variables AZURE_VISION_KEY, AZURE_VISION_ENDPOINT, and OPENAI_API_KEY."
+                "OpenAI API Key is missing. Please set the environment variable OPENAI_API_KEY."
             )
             logger.critical("Application cannot proceed due to missing API configurations.")
-            self.root.destroy() # Close the hidden root window and exit
+            self.root.destroy()
 
     def _setup_hotkeys(self):
-        """
-        Sets up global hotkeys to trigger the screen capture process.
-        """
         for hotkey in HOTKEYS:
-            keyboard.add_hotkey(hotkey, self._on_hotkey_pressed)
+            keyboard.add_hotkey(hotkey, lambda: self.loop.create_task(self._run_analysis_workflow()))
             logger.debug(f"Registered hotkey: {hotkey}")
 
-    def _on_hotkey_pressed(self):
-        """
-        Callback function executed when a registered hotkey is pressed.
-        Initiates the screen capture and analysis workflow.
-        """
+    async def _run_analysis_workflow(self):
         logger.info("Hotkey pressed. Initiating document capture workflow.")
-        # Ensure the results window is hidden before starting new capture
-        if self.results_window and self.results_window.winfo_exists():
-            self.results_window.withdraw()
+        # self._manage_results_window_visibility(show=False)
+        self._update_ui_with_processing_status(True)
 
-        # Run the capture and analysis in a separate thread to keep UI responsive
-        threading.Thread(target=self._run_analysis_workflow).start()
-
-    def _run_analysis_workflow(self):
-        """
-        Executes the full document analysis workflow: capture, OCR, AI analysis, and display.
-        This runs in a separate thread.
-        """
         try:
-            # Step 1: Capture screen region
             logger.info("Waiting for user to select screen region...")
-            coordinates = self.screenshot_capture.select_region()
+            coordinates = await self.loop.run_in_executor(None, self.screenshot_capture.select_region)
             selected_image = None
             if coordinates:
-                selected_image = self.screenshot_capture.crop_image(coordinates)
+                selected_image = await self.loop.run_in_executor(None, self.screenshot_capture.crop_image, coordinates)
 
             if selected_image:
-                logger.info("Screen region captured. Performing OCR and AI analysis...")
-                
-                # Ensure results window exists and is visible before showing processing message
-                if not self.results_window or not self.results_window.winfo_exists():
-                    # Create it with an empty list to show "Ready for new document" initially
-                    self.results_window = ResultsWindow(
-                        self.root,
-                        [], # Pass an empty list
-                        self._on_new_input_callback_from_results_ui
-                    )
-                else:
-                    self.results_window.deiconify() # Ensure it's not minimized
-                    self.results_window.lift() # Bring to front
-                    self.results_window.focus_force() # Give focus
-
-                self.results_window.show_processing_message() # NEW: Show processing message in ResultsWindow
-                
-                # Step 2: Perform OCR
+                logger.info("Screen region captured. Performing AI analysis...")
                 image_bytes = self._convert_pil_to_bytes(selected_image)
-                ocr_text = self.ocr_service.perform_ocr(image_bytes)
+                base64_image = base64.b64encode(image_bytes).decode('utf-8')
 
-                if ocr_text:
-                    # Step 3: Perform AI Analysis
-                    analysis_result = self.ai_analysis_service.analyze_mortgage_document(ocr_text)
-                    self.all_analysis_results.append(analysis_result) # Add new result to the list
+                analysis_result = await self.ai_analysis_service.analyze_mortgage_document(
+                    ocr_text="",
+                    base64_image=base64_image
+                )
 
-                    logger.info("AI analysis completed. Displaying results.")
-                    self.results_window.hide_processing_message() # NEW: Hide processing message
-                    # Step 4: Display results in UI
-                    self._display_results()
-                else:
-                    self.results_window.hide_processing_message() # NEW: Hide processing message on OCR error
-                    messagebox.showerror("OCR Error", "Failed to extract text from the captured image.")
-                    logger.error("OCR failed, no text extracted.")
-                    self._display_results(error_message="OCR failed to extract text.")
+                if not analysis_result.document_id or analysis_result.document_id == "Unnamed Document":
+                    analysis_result.document_id = f"Document_{len(self.all_analysis_results) + 1}"
+
+                self.all_analysis_results.append(analysis_result)
+                logger.info("AI analysis completed. Displaying results.")
+                self._update_ui_with_results(update_data=True, error_message=analysis_result.error)
             else:
                 logger.info("Screen capture cancelled or failed.")
-                # If capture is cancelled, ensure results window is brought back if it was previously open
-                if self.results_window and not self.results_window.winfo_exists():
-                    # If window was destroyed (e.g., by user closing it), re-create it with existing data
-                    self._display_results()
-                elif self.results_window:
-                    # If it was just withdrawn, bring it back
-                    self.results_window.deiconify() # Or .lift() and .focus_force()
-                    self.results_window.lift()
-                    self.results_window.focus_force()
-
+                self._update_ui_with_results(update_data=False)
         except Exception as e:
             logger.critical(f"An unhandled error occurred in analysis workflow: {e}", exc_info=True)
-            if self.results_window and self.results_window.winfo_exists():
-                self.results_window.hide_processing_message() # NEW: Hide processing message on unexpected error
-            messagebox.showerror("Application Error", f"An unexpected error occurred: {e}")
-            self._display_results(error_message=f"An unexpected error occurred: {e}")
+            error_msg = f"An unexpected error occurred: {e}"
+            dummy_result = AnalysisResult(entities=MortgageDocumentEntities(), summary="", error=error_msg, document_id=f"Document_{len(self.all_analysis_results) + 1}_Error")
+            self.all_analysis_results.append(dummy_result)
+            self._update_ui_with_results(update_data=True, error_message=error_msg)
+        finally:
+            self._update_ui_with_processing_status(False)
 
-
-    def _convert_pil_to_bytes(self, pil_image):
-        """Converts a PIL Image object to bytes (PNG format)."""
-        from io import BytesIO
+    def _convert_pil_to_bytes(self, pil_image: Image.Image) -> bytes:
         byte_arr = BytesIO()
         pil_image.save(byte_arr, format='PNG')
         return byte_arr.getvalue()
 
-    def _display_results(self, error_message: str = None):
-        """
-        Displays the analysis results in a dedicated Tkinter window.
-        Creates the window if it doesn't exist, or updates its content if it does.
-        """
-        # If there's an error message and no previous results, create a dummy result for display
-        if error_message and not self.all_analysis_results:
-            dummy_result = AnalysisResult(
-                entities=MortgageDocumentEntities(),
-                summary="",
-                error=error_message
-            )
-            # Temporarily add to a list to pass to ResultsWindow, but don't store permanently
-            temp_results = [dummy_result]
+    def _update_ui_with_results(self, update_data: bool, error_message: str = None):
+        self.root.after(0, self._manage_results_window_visibility, True, update_data, error_message)
+
+    def _update_ui_with_processing_status(self, processing: bool):
+        self.root.after(0, self._manage_results_window_processing_visibility, processing)
+
+    def _manage_results_window_visibility(self, show: bool, update_data: bool = False, error_message: str = None):
+        current_results = self.all_analysis_results
+
+        if error_message and not current_results:
+            current_results = [AnalysisResult(entities=MortgageDocumentEntities(), summary="", error=error_message)]
             logger.warning(f"Displaying results with error: {error_message}")
-        else:
-            temp_results = self.all_analysis_results # Use the actual stored results
 
         if not self.results_window or not self.results_window.winfo_exists():
-            logger.info("Creating new ResultsWindow.")
-            self.results_window = ResultsWindow(
-                self.root,
-                temp_results, # Pass the (potentially empty or error-containing) list
-                self._on_new_input_callback_from_results_ui # Pass the callback for the button
-            )
+            if show:
+                logger.info("Creating new ResultsWindow.")
+                self.results_window = ResultsWindow(
+                    self.root,
+                    current_results,
+                    self._on_new_input_callback_from_results_ui
+                )
+                self.results_window._center_window()
         else:
-            logger.info("Updating existing ResultsWindow.")
-            self.results_window.update_data(temp_results) # Update with the latest data
-            self.results_window.deiconify() # Ensure it's not minimized
-            self.results_window.lift() # Bring to front
-            self.results_window.focus_force() # Give focus
+            if show:
+                logger.info("Updating existing ResultsWindow.")
+                if update_data:
+                    self.results_window.update_data(current_results)
+                self.results_window.deiconify()
+                self.results_window.lift()
+                self.results_window.focus_force()
+            else:
+                self.results_window.withdraw()
+
+    def _manage_results_window_processing_visibility(self, processing: bool):
+        if self.results_window and self.results_window.winfo_exists():
+            self.results_window.hide_processing_message()
+            # if processing:
+            #     self.results_window.show_processing_message()
+            # else:
+            #     self.results_window.hide_processing_message()
+
+    # def _on_new_input_callback_from_results_ui(self):
+    #     logger.info("User requested new document capture. Clearing stored results.")
+    #     self.all_analysis_results.clear()
+    #     self._manage_results_window_visibility(show=True, update_data=True)
+    #     self._manage_results_window_visibility(show=False)
+    #     logger.info("UI cleared. Waiting for hotkey to initiate new screenshot capture.")
 
     def _on_new_input_callback_from_results_ui(self):
-        """
-        Callback for 'Capture New Document' button in the results UI.
-        Clears the stored results and prepares for a new capture, but does NOT
-        immediately launch the screenshot.
-        """
         logger.info("User requested new document capture. Clearing stored results.")
-        self.all_analysis_results.clear() # Clear the main list of results
+        self.all_analysis_results.clear()
+        self._manage_results_window_visibility(show=True, update_data=True)
+        logger.info("UI refreshed and ready for new input.")
 
-        # Update the results window to reflect the cleared state
-        if self.results_window and self.results_window.winfo_exists():
-            self.results_window.update_data(self.all_analysis_results) # Pass the now empty list
-            self.results_window.deiconify() # Ensure it's visible
-            self.results_window.lift() # Bring to front
-            self.results_window.focus_force() # Give focus
-            self.results_window.withdraw() # Hide it again to allow new capture
-
-        logger.info("UI cleared. Waiting for hotkey to initiate new screenshot capture.")
-        # No call to self._on_hotkey_pressed() here. The app will now wait for a hotkey.
 
     def run(self):
-        """
-        Starts the main application loop. This keeps the script alive
-        to listen for hotkey presses and manage UI events.
-        """
-        # This loop is necessary to keep the Tkinter event listener alive
-        # for hotkey detection and UI interactions.
         self.root.mainloop()
 
 if __name__ == "__main__":

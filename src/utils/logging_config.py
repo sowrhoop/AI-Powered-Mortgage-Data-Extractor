@@ -35,5 +35,3 @@ def setup_logging():
     logger = logging.getLogger(__name__)
     logger.info("Logging configured. Messages will be saved to app_log.log and shown in console.")
     logger.info(f"Log file location: {log_file_path}")
-
-

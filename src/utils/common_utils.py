@@ -83,5 +83,3 @@ def run_as_admin():
         else:
             logger.warning("Admin elevation is only supported on Windows.")
             return False
-
-

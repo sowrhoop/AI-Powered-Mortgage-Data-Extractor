@@ -138,4 +138,3 @@ class ScreenshotCapture:
         except Exception as e:
             logger.error(f"Error during screen capture or cropping: {e}", exc_info=True)
             return None
-
