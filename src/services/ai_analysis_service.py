@@ -28,7 +28,7 @@ class AIAnalysisService:
     async def analyze_mortgage_document(self, ocr_text: str, base64_image: Optional[str] = None) -> AnalysisResult:
         """
         Sends a Base64 image to GPT-4o to perform OCR, extract mortgage-related entities,
-        and generate a summary. The prompt is designed for efficient, accurate extraction
+        and generate a concise summary. The prompt is designed for efficient, accurate extraction
         from the image, including contextual validation.
         
         :param ocr_text: This parameter is no longer used as OCR is handled by OpenAI.
@@ -57,6 +57,9 @@ Extract the following entities. If a field is not found or not applicable, use "
 {{
   "Document Type": "...",
   "Borrower Names": ["...", "..."],
+  "Borrower Alias": ["...", "..."],
+  "Borrower With Relationship": ["...", "..."],(extract only borrower with relationship information)
+  "Borrower with Tenant Information": ["...", "..."],(extract only borrower with tenant information)
   "Borrower Address":"...",(currently residing at)
   "Lender Name": "...",
   "Trustee Name": "...",
@@ -74,12 +77,10 @@ Extract the following entities. If a field is not found or not applicable, use "
   "Recording Time": "...",
   "Re-recording Information": "...",
   "Recording Cost": "...",
-  "Page Count": ...,
-  "Missing Pages": "...",
   "Borrower Signatures Present": {{
       "Borrower Name 1": "Yes/No",
       "Borrower Name 2": "Yes/No"
-  }},
+  }},(borrower signatures present borrower names is yes then include in the analysis)
   "Riders Present": [
     {{ "Name": "...", "SignedAttached": "Yes/No" }}
   ],
@@ -95,16 +96,18 @@ Extract the following entities. If a field is not found or not applicable, use "
 **Extraction Guidelines:**
 * **Document Type:** "Security Instrument" or "Title Policy".
 * **Recording Details:** Look for BK/PG, 10-12 digit Document No. (starts with current year or Title Order No.) on first or last 2 pages. For re-recording, use template: `DOCUMENT# (OR PAGE #); Re-recorded on ______in Book ______, Page_____ as Document/Instrument # ________.` Recording Cost: "Not Listed" if not present.
-* **Borrower(s) Name:** "BORROWER/MORTGAGOR/OWNER/TRUSTOR: PROPERTY OWNER TENANCY INFORMATION".
-* **Borrower Address"** "currently residing at"
+* **Borrower(s) Name:** "BORROWER/MORTGAGOR/OWNER/TRUSTOR: PROPERTY OWNER TENANCY INFORMATION."
+* **Borrower Alias:** "BORROWER ALIAS INFORMATION."
+* **Borrower With Relationship:** "BORROWER'S RELATIONSHIP INFORMATION. RETURN ONLY RELATIONSHIP INFORMATION."
+* **Borrower with Tenant Information:** "BORROWER WITH TENANT INFORMATION."
+* **Borrower Address"** "currently residing at from borrower address"
 * **Lender Name:** "LENDER/BENEFICIARY NAME".
 * **Document Date:** "NOTE DATE/DOCUMENT PREPARED DATE/MADE DATE/DATED DATE/DOCUMENT DATE", "the promissory note dated".
 * **Loan Amount:** "Note to pay Lender (LOAN AMOUNT)".
 * **Maturity Date:** "pay the debt full not later than (MATURITY DATE)". "N/A" for 2nd mortgage if not present.
 * **Property Address (Guardrail):** "which currently has the address" or Prioritize the address explicitly stated in the "Transfer of Rights" or "Legal Description" sections. If no specific section is indicated, use the most prominent or complete address from the image, do not take Borrower Address as Property Address" (which currently has the address or check in the Legal Description Detail).
 * **Trustee Name & Address:** If Deed of Trust, extract. If Mortgage, "N/A". Look for "TRUSTEE" and "TRUSTEE Address".
-* **Page Count:** Total pages in security instrument (don't count attached riders as separate). Specify missing pages like "Missing pages 5 – 8".
-* **Signatures of Parties (Image Analysis):** For each listed borrower, determine "Yes/No" if a signature is physically present next to their name in the image.
+* **Borrower Signatures Present:** For each borrower, "Yes/No" if signature is present. If multiple borrowers, list each with their signature status (e.g., "Brad Johnson: Yes, Kimberly Kliethermes: No").
 * **Riders Present:** List marked/selected riders. For each, "Yes/No" if signed copy attached. "N/A" if no riders marked.
 * **Initialed Changes:** For handwritten corrections on material fields (Loan amount, interest rate, payment amount, first payment due date, maturity date, deletion of mortgage covenants), "Yes/No" for borrower initials. "N/A" if no corrections. Disregard Notary section changes.
 * **MERS Rider & MIN:** "Yes/No" for MERS Rider selected/marked. If selected, "Yes/No" for signed attached. MIN always on first page if MERS is available.
@@ -137,18 +140,19 @@ Provide a concise, plain-English summary of the mortgage document. Highlight its
             response = await self.client.chat.completions.create(
                 model="gpt-4o", # Using gpt-4o for JSON output support and improved performance
                 messages=messages,
-                temperature=0.3, # Lower temperature for more deterministic and factual extraction
+                temperature=0.5, # Lower temperature for more deterministic and factual extraction
                 response_format={"type": "json_object"}, # Ensure JSON output
                 timeout=60.0 # Set a timeout for the API call in seconds
             )
  
             # Access the content from the response object
             result_content = response.choices[0].message.content
-            logger.debug(f"Raw GPT response: {result_content[:500]}...")
+            logger.debug(f"Raw GPT response: {result_content}...")
  
             # Attempt to parse the JSON output from GPT
             parsed_data = json.loads(result_content)
- 
+
+            logger.info(f"Parsed GPT response: {parsed_data}")
             # Validate the top-level structure
             if "entities" not in parsed_data or "summary" not in parsed_data:
                 logger.error(f"GPT response is malformed: missing 'entities' or 'summary' keys. Response: {result_content}")
@@ -177,6 +181,10 @@ Provide a concise, plain-English summary of the mortgage document. Highlight its
             parsed_entities = MortgageDocumentEntities(
                 DocumentType=entities_dict.get("Document Type", "N/A"),
                 BorrowerNames=entities_dict.get("Borrower Names", []),
+                BorrowerAlias=entities_dict.get("Borrower Alias", []),
+                BorrowerWithRelationship=entities_dict.get("Borrower With Relationship", []),
+                BorrowerWithTenantInformation=entities_dict.get("Borrower with Tenant Information", []),
+                BorrowerAddress=entities_dict.get("Borrower Address", "N/A"),
                 LenderName=entities_dict.get("Lender Name", "N/A"),
                 TrusteeName=entities_dict.get("Trustee Name", "N/A"),
                 TrusteeAddress=entities_dict.get("Trustee Address", "N/A"),
@@ -193,8 +201,6 @@ Provide a concise, plain-English summary of the mortgage document. Highlight its
                 RecordingTime=entities_dict.get("Recording Time", "N/A"),
                 ReRecordingInformation=entities_dict.get("Re-recording Information", "N/A"),
                 RecordingCost=entities_dict.get("Recording Cost", "Not Listed"),
-                PageCount=entities_dict.get("Page Count"), # Can be None if not found
-                MissingPages=entities_dict.get("Missing Pages", "N/A"),
                 BorrowerSignaturesPresent=entities_dict.get("Borrower Signatures Present", {}),
                 RidersPresent=riders_list, # Use the correctly parsed list
                 InitialedChangesPresent=entities_dict.get("Initialed Changes Present", "N/A"),
@@ -204,7 +210,7 @@ Provide a concise, plain-English summary of the mortgage document. Highlight its
                 LegalDescriptionPresent=entities_dict.get("Legal Description Present", "No"),
                 LegalDescriptionDetail=entities_dict.get("Legal Description Detail", "N/A")
             )
- 
+            logger.info(f"Parsed entities: {parsed_entities}")
             return AnalysisResult(entities=parsed_entities, summary=summary_text)
  
         # Catching and logging specific OpenAI error types

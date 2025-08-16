@@ -17,6 +17,9 @@ class MortgageDocumentEntities:
     """
     DocumentType: str = "N/A"
     BorrowerNames: List[str] = field(default_factory=list) # List of borrower full names
+    BorrowerAlias: List[str] = field(default_factory=list) # List of borrower aliases
+    BorrowerWithRelationship: List[str] = field(default_factory=list) # List of borrower with relationship information
+    BorrowerWithTenantInformation: List[str] = field(default_factory=list) # List of borrower with tenant information
     BorrowerAddress: str = "N/A" # Added: Borrower's current residing address
     LenderName: str = "N/A"
     TrusteeName: str = "N/A" # "N/A" if Mortgage
@@ -34,8 +37,6 @@ class MortgageDocumentEntities:
     RecordingTime: str = "N/A"
     ReRecordingInformation: str = "N/A" # Template: DOCUMENT# (OR PAGE #); Re-recorded on ______in Book ______, Page_____ as Document/Instrument # ________.`
     RecordingCost: str = "Not Listed"
-    PageCount: Optional[int] = None # Total number of pages
-    MissingPages: str = "N/A" # e.g., "Missing pages 5 – 8" or "N/A"
     BorrowerSignaturesPresent: Dict[str, str] = field(default_factory=dict) # e.g., {"John Doe": "Yes", "Jane Doe": "No"}
     RidersPresent: List[Rider] = field(default_factory=list) # List of Rider objects
     InitialedChangesPresent: str = "N/A" # "Yes" or "No"
