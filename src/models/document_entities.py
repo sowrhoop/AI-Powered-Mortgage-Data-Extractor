@@ -1,58 +1,78 @@
 from dataclasses import dataclass, field
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Union
+
+@dataclass
+class ConfidenceValue:
+    """
+    Represents an extracted value along with its confidence score.
+    Confidence score should be between 0.0 and 1.0.
+    """
+    value: Union[str, List[str], List[Any], None] = "N/A" # Using Any for RidersPresent flexibility
+    confidence: float = 0.0
+
+    def __str__(self):
+        # Provides a string representation of just the value, for easier display
+        if self.value is None or self.value == "N/A":
+            return "N/A"
+        if isinstance(self.value, list):
+            # Special handling for lists for some fields
+            return ", ".join(map(str, self.value)) if self.value else "N/A"
+        return str(self.value)
+
+    def __eq__(self, other):
+        if isinstance(other, ConfidenceValue):
+            return self.value == other.value and self.confidence == other.confidence
+        return False
+
+    def __hash__(self):
+        return hash((str(self.value), self.confidence))
+
 
 @dataclass
 class Rider:
-    """Represents a rider attached to the mortgage document."""
-    Name: str
-    SignedAttached: str # "Yes" or "No"
+    Name: ConfidenceValue = field(default_factory=lambda: ConfidenceValue(value="N/A"))
+    Present: ConfidenceValue = field(default_factory=lambda: ConfidenceValue(value="No"))
+    SignedAttached: ConfidenceValue = field(default_factory=lambda: ConfidenceValue(value="No"))
+
+@dataclass
+class BorrowerEntry:
+    Name: ConfidenceValue = field(default_factory=lambda: ConfidenceValue(value="N/A"))
+    Alias: ConfidenceValue = field(default_factory=lambda: ConfidenceValue(value=[]))  # list of aliases or string
+    Relationship: ConfidenceValue = field(default_factory=lambda: ConfidenceValue(value="N/A"))
+    TenantInformation: ConfidenceValue = field(default_factory=lambda: ConfidenceValue(value="N/A"))
 
 @dataclass
 class MortgageDocumentEntities:
-    """
-    A dataclass to hold all extracted entities from a mortgage document,
-    following the detailed extraction checklist.
-    Default values are set to "N/A", "No", or empty lists/dicts to ensure
-    all fields are always present, even if not found by the AI.
-    """
-    DocumentType: str = "N/A"
-    BorrowerNames: List[str] = field(default_factory=list) # List of borrower full names
-    BorrowerAlias: List[str] = field(default_factory=list) # List of borrower aliases
-    BorrowerWithRelationship: List[str] = field(default_factory=list) # List of borrower with relationship information
-    BorrowerWithTenantInformation: List[str] = field(default_factory=list) # List of borrower with tenant information
-    BorrowerAddress: str = "N/A" # Added: Borrower's current residing address
-    LenderName: str = "N/A"
-    TrusteeName: str = "N/A" # "N/A" if Mortgage
-    TrusteeAddress: str = "N/A" # Added: Trustee Address, "N/A" if Mortgage
-    LoanAmount: str = "N/A"
-    PropertyAddress: str = "N/A"
-    DocumentDate: str = "N/A"
-    MaturityDate: str = "N/A"
-    APN_ParcelID: str = "N/A"
-    RecordingStampPresent: str = "No" # "Yes" or "No"
-    RecordingBook: str = "N/A"
-    RecordingPage: str = "N/A"
-    RecordingDocumentNumber: str = "N/A"
-    RecordingDate: str = "N/A"
-    RecordingTime: str = "N/A"
-    ReRecordingInformation: str = "N/A" # Template: DOCUMENT# (OR PAGE #); Re-recorded on ______in Book ______, Page_____ as Document/Instrument # ________.`
-    RecordingCost: str = "Not Listed"
-    BorrowerSignaturesPresent: Dict[str, str] = field(default_factory=dict) # e.g., {"John Doe": "Yes", "Jane Doe": "No"}
-    RidersPresent: List[Rider] = field(default_factory=list) # List of Rider objects
-    InitialedChangesPresent: str = "N/A" # "Yes" or "No"
-    MERS_RiderSelected: str = "No" # "Yes" or "No"
-    MERS_RiderSignedAttached: str = "No" # "Yes" or "No"
-    MIN: str = "N/A" # Mortgage Identification Number
-    LegalDescriptionPresent: str = "No" # "Yes" or "No"
-    LegalDescriptionDetail: str = "N/A" # "Legal Description available" or "legal description is missing"
+    DocumentType: ConfidenceValue = field(default_factory=lambda: ConfidenceValue(value="N/A"))
+    Borrower: ConfidenceValue = field(default_factory=lambda: ConfidenceValue(value=[]))  # list of BorrowerEntry
+    BorrowerAddress: ConfidenceValue = field(default_factory=lambda: ConfidenceValue(value="N/A"))
+    LenderName: ConfidenceValue = field(default_factory=lambda: ConfidenceValue(value="N/A"))
+    TrusteeName: ConfidenceValue = field(default_factory=lambda: ConfidenceValue(value="N/A"))
+    TrusteeAddress: ConfidenceValue = field(default_factory=lambda: ConfidenceValue(value="N/A"))
+    LoanAmount: ConfidenceValue = field(default_factory=lambda: ConfidenceValue(value="N/A"))
+    PropertyAddress: ConfidenceValue = field(default_factory=lambda: ConfidenceValue(value="N/A"))
+    DocumentDate: ConfidenceValue = field(default_factory=lambda: ConfidenceValue(value="N/A"))
+    MaturityDate: ConfidenceValue = field(default_factory=lambda: ConfidenceValue(value="N/A"))
+    APN_ParcelID: ConfidenceValue = field(default_factory=lambda: ConfidenceValue(value="N/A"))
+    RecordingStampPresent: ConfidenceValue = field(default_factory=lambda: ConfidenceValue(value="No"))
+    RecordingBook: ConfidenceValue = field(default_factory=lambda: ConfidenceValue(value="N/A"))
+    RecordingPage: ConfidenceValue = field(default_factory=lambda: ConfidenceValue(value="N/A"))
+    RecordingDocumentNumber: ConfidenceValue = field(default_factory=lambda: ConfidenceValue(value="N/A"))
+    RecordingDate: ConfidenceValue = field(default_factory=lambda: ConfidenceValue(value="N/A"))
+    RecordingTime: ConfidenceValue = field(default_factory=lambda: ConfidenceValue(value="N/A"))
+    ReRecordingInformation: ConfidenceValue = field(default_factory=lambda: ConfidenceValue(value="N/A"))
+    RecordingCost: ConfidenceValue = field(default_factory=lambda: ConfidenceValue(value="Not Listed"))
+    RidersPresent: ConfidenceValue = field(default_factory=lambda: ConfidenceValue(value=[])) # List of Rider objects
+    InitialedChangesPresent: ConfidenceValue = field(default_factory=lambda: ConfidenceValue(value="N/A"))
+    MERS_RiderSelected: ConfidenceValue = field(default_factory=lambda: ConfidenceValue(value="No"))
+    MERS_RiderSignedAttached: ConfidenceValue = field(default_factory=lambda: ConfidenceValue(value="No"))
+    MIN: ConfidenceValue = field(default_factory=lambda: ConfidenceValue(value="N/A"))
+    LegalDescriptionPresent: ConfidenceValue = field(default_factory=lambda: ConfidenceValue(value="No"))
+    LegalDescriptionDetail: ConfidenceValue = field(default_factory=lambda: ConfidenceValue(value="N/A"))
 
 @dataclass
 class AnalysisResult:
-    """
-    A dataclass to encapsulate the full result of the document analysis,
-    including the structured entities, the summary, and any error messages.
-    """
     entities: MortgageDocumentEntities
     summary: str
-    error: Optional[str] = None # To hold any error messages during analysis
-    document_id: str = "Unnamed Document" # New field to identify each document/screenshot
+    error: Optional[str] = None
+    document_id: str = "Unnamed Document"

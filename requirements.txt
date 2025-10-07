@@ -1,0 +1,4 @@
+pillow
+keyboard
+openai
+PyInstaller

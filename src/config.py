@@ -3,44 +3,23 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# --- Application Paths & Files ---
-# Base directory for application data (e.g., for settings file)
 APP_DATA_DIR = os.path.join(os.path.expanduser("~"), ".mortgage_analyzer_app")
-os.makedirs(APP_DATA_DIR, exist_ok=True) # Ensure the directory exists
+os.makedirs(APP_DATA_DIR, exist_ok=True)
 
-# Path to the settings file
 SETTINGS_FILE_PATH = os.path.join(APP_DATA_DIR, "settings.json")
-
-# Name of the file where structured analysis results (JSON) will be saved.
 OUTPUT_FILE_NAME = "extracted_mortgage_data.json"
 
+# Do not read any values from environment variables. Defaults are internal,
+# and user configuration is persisted in settings.json handled by the app.
+OPENAI_API_KEY = ""
 
-# --- API Configuration ---
-# OpenAI API key for GPT-4 analysis
-# This will be initialized from environment variable or settings file
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "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")
+# Default hotkeys used unless overridden via settings.json
+HOTKEYS = ['ctrl+alt+m', 'ctrl+alt+a']
 
-# Validate that critical API keys are set (initial check, can be overridden by settings)
-if not OPENAI_API_KEY:
-    logger.critical("OPENAI_API_KEY environment variable not set. Please set it to proceed or use the settings dialog.")
-
-
-# --- Application Behavior Configuration ---
-# Hotkeys to trigger the screen capture.
-# This will be loaded from settings or environment variables, or default.
-HOTKEYS = os.getenv("HOTKEYS", 'ctrl+alt+m,ctrl+alt+a').split(',')
-HOTKEYS = [h.strip() for h in HOTKEYS if h.strip()] # Clean up and remove empty strings
-
-
-# --- UI Display Name Mapping ---
-# Map long entity names to shorter, more UI-friendly names
 ENTITY_DISPLAY_NAMES = {
     "DocumentType": "Doc Type",
-    "BorrowerNames": "Borrowers",
+    "Borrower": "Borrowers",
     "BorrowerAddress": "Borrower Addr.",
-    "BorrowerAlias": "Borrower Alias",
-    "BorrowerWithRelationship": "Borrower Relation",
-    "BorrowerWithTenantInformation": "Borrower Tenant Info",
     "LenderName": "Lender",
     "TrusteeName": "Trustee",
     "TrusteeAddress": "Trustee Addr.",
@@ -57,8 +36,7 @@ ENTITY_DISPLAY_NAMES = {
     "RecordingTime": "Rec. Time",
     "ReRecordingInformation": "Re-Rec. Info",
     "RecordingCost": "Rec. Cost",
-    "BorrowerSignaturesPresent": "Borrower Signatures",
-    "RidersPresent": "Riders",
+    "RidersPresent": "Checked Riders",
     "InitialedChangesPresent": "Initialed Changes?",
     "MERS_RiderSelected": "MERS Rider Sel.?",
     "MERS_RiderSignedAttached": "MERS Rider Signed?",
@@ -67,10 +45,124 @@ ENTITY_DISPLAY_NAMES = {
     "LegalDescriptionDetail": "Legal Desc. Detail"
 }
 
+# Entity keys that represent currency/monetary amounts. Used for consistent formatting
+# and normalization across the app (always keep two decimals).
+MONEY_FIELDS = [
+    "LoanAmount",
+    "RecordingCost",
+]
 
-# --- AI Model Configuration (if applicable for grammar correction or other local models) ---
+# Mapping of US state/territory postal abbreviations to full names for
+# address normalization when required (e.g., PropertyAddress).
+US_STATE_ABBR_TO_NAME = {
+    "AL": "Alabama",
+    "AK": "Alaska",
+    "AZ": "Arizona",
+    "AR": "Arkansas",
+    "CA": "California",
+    "CO": "Colorado",
+    "CT": "Connecticut",
+    "DE": "Delaware",
+    "FL": "Florida",
+    "GA": "Georgia",
+    "HI": "Hawaii",
+    "ID": "Idaho",
+    "IL": "Illinois",
+    "IN": "Indiana",
+    "IA": "Iowa",
+    "KS": "Kansas",
+    "KY": "Kentucky",
+    "LA": "Louisiana",
+    "ME": "Maine",
+    "MD": "Maryland",
+    "MA": "Massachusetts",
+    "MI": "Michigan",
+    "MN": "Minnesota",
+    "MS": "Mississippi",
+    "MO": "Missouri",
+    "MT": "Montana",
+    "NE": "Nebraska",
+    "NV": "Nevada",
+    "NH": "New Hampshire",
+    "NJ": "New Jersey",
+    "NM": "New Mexico",
+    "NY": "New York",
+    "NC": "North Carolina",
+    "ND": "North Dakota",
+    "OH": "Ohio",
+    "OK": "Oklahoma",
+    "OR": "Oregon",
+    "PA": "Pennsylvania",
+    "RI": "Rhode Island",
+    "SC": "South Carolina",
+    "SD": "South Dakota",
+    "TN": "Tennessee",
+    "TX": "Texas",
+    "UT": "Utah",
+    "VT": "Vermont",
+    "VA": "Virginia",
+    "WA": "Washington",
+    "WV": "West Virginia",
+    "WI": "Wisconsin",
+    "WY": "Wyoming",
+    "DC": "District of Columbia",
+    "PR": "Puerto Rico",
+    "GU": "Guam",
+    "VI": "U.S. Virgin Islands",
+    "AS": "American Samoa",
+    "MP": "Northern Mariana Islands",
+}
+
+RIDER_ALLOWLIST = [
+    "Adjustable Rate Rider",
+    "1-4 Family Rider",
+    "Condominium Rider",
+    "Planned Unit Development Rider",
+    "Second Home Rider",
+    "V.A. Rider",
+    "Biweekly Payment Rider",
+]
+
+RIDER_ALIASES = {
+    "adjustable rate rider": "Adjustable Rate Rider",
+    "arm rider": "Adjustable Rate Rider",
+
+    "1-4 family rider": "1-4 Family Rider",
+    "1 to 4 family rider": "1-4 Family Rider",
+    "one-to-four family rider": "1-4 Family Rider",
+    "one to four family rider": "1-4 Family Rider",
+
+    "condominium rider": "Condominium Rider",
+    "condo rider": "Condominium Rider",
+
+    "planned unit development rider": "Planned Unit Development Rider",
+    "planned unit dev rider": "Planned Unit Development Rider",
+    "pud rider": "Planned Unit Development Rider",
+
+    "second home rider": "Second Home Rider",
+
+    "v.a. rider": "V.A. Rider",
+    "va rider": "V.A. Rider",
+    "v a rider": "V.A. Rider",
+
+    "biweekly payment rider": "Biweekly Payment Rider",
+    "bi-weekly payment rider": "Biweekly Payment Rider",
+    "bi weekly payment rider": "Biweekly Payment Rider",
+
+    # Ambiguous labels to ignore
+    "other(s) [specify]": "",
+    "others": "",
+    "other": "",
+}
+
 GRAMMAR_CORRECTION_MODEL_NAME = "prithivida/grammar_error_correcter_v1"
 
-# --- Logging Configuration (basic, detailed setup in utils/logging_config.py) ---
 LOG_FILE_PATH = "app_log.log"
 LOG_LEVEL = logging.INFO
+
+# OpenAI model and request settings
+OPENAI_MODEL = "gpt-4o-mini"
+OPENAI_TIMEOUT = 60.0
+
+# Minimum confidence required for UI display of any entity/value
+UI_CONFIDENCE_MIN = 0.9
