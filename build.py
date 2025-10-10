@@ -19,7 +19,7 @@ EXCLUDES = [
     "onnx", "onnxruntime",
 ]
 
-NAME = "AI-Powered Mortgage Document Analyzer"
+NAME = "Ascendant Vision AI Platform"
 
 # Be explicit about dynamic packages PyInstaller may miss
 COLLECT_SUBMODULES = [
@@ -66,7 +66,7 @@ def main():
         print("Error: Python 3.9+ is required to build this project.")
         sys.exit(2)
 
-    parser = argparse.ArgumentParser(description="Build the Mortgage Document Analyzer executable with PyInstaller.")
+    parser = argparse.ArgumentParser(description="Build the Ascendant Vision AI Platform executable with PyInstaller.")
     parser.add_argument("entry", nargs="?", default="src/main.py", help="Entry point script (default: src/main.py)")
     parser.add_argument("--name", default=NAME, help=f"Application name (default: {NAME})")
     parser.add_argument("--console", action="store_true", help="Build with console window (debug run)")

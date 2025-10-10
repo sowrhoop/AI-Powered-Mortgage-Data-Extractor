@@ -3,11 +3,11 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-APP_DATA_DIR = os.path.join(os.path.expanduser("~"), ".mortgage_analyzer_app")
+APP_DATA_DIR = os.path.join(os.path.expanduser("~"), ".ascendant_vision_ai_platform")
 os.makedirs(APP_DATA_DIR, exist_ok=True)
 
 SETTINGS_FILE_PATH = os.path.join(APP_DATA_DIR, "settings.json")
-OUTPUT_FILE_NAME = "extracted_mortgage_data.json"
+OUTPUT_FILE_NAME = "ascendant_vision_ai_results.json"
 
 # Do not read any values from environment variables. Defaults are internal,
 # and user configuration is persisted in settings.json handled by the app.
@@ -157,7 +157,7 @@ RIDER_ALIASES = {
 
 GRAMMAR_CORRECTION_MODEL_NAME = "prithivida/grammar_error_correcter_v1"
 
-LOG_FILE_PATH = "app_log.log"
+LOG_FILE_PATH = "ascendant_vision_ai_platform.log"
 LOG_LEVEL = logging.INFO
 
 # OpenAI model and request settings

@@ -16,13 +16,13 @@ class ResultsWindow(tk.Toplevel):
                  on_new_input_callback: Callable[[], None], on_close_callback: Callable[[], None]):
         super().__init__(parent)
         logger.info("ResultsWindow: Initializing...")
-        self.title("AI-Powered Mortgage Document Analyzer")
+        self.title("Ascendant Vision AI Platform")
         self.geometry("850x750")
         self.minsize(600, 500)
 
         title_label = ttk.Label(
             self,
-            text="AI-Powered Mortgage Document Analyzer",
+            text="Ascendant Vision AI Platform",
             font=("Helvetica", 15, "bold"),
             anchor="center"
         )

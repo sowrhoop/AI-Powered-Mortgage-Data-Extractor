@@ -36,9 +36,9 @@ try:
 except Exception:
     logger.warning("Failed to set process DPI awareness. High-DPI layouts may be affected.")
 
-class MortgageDocumentAnalyzerApp:
+class AscendantVisionAIPlatformApp:
     def __init__(self):
-        logger.info("Initializing MortgageDocumentAnalyzerApp...")
+        logger.info("Initializing AscendantVisionAIPlatformApp...")
         self.root = tk.Tk()
         self.root.withdraw()
 
@@ -691,5 +691,5 @@ class MortgageDocumentAnalyzerApp:
         logger.info("Application shut down.")
 
 if __name__ == "__main__":
-    app = MortgageDocumentAnalyzerApp()
+    app = AscendantVisionAIPlatformApp()
     app.run()

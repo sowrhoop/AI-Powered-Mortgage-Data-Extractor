@@ -2,7 +2,7 @@ import logging
 import os
 
 def setup_logging():
-    log_file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../../app_log.log')
+    log_file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../../ascendant_vision_ai_platform.log')
     os.makedirs(os.path.dirname(log_file_path), exist_ok=True)
 
     logging.basicConfig(
@@ -19,5 +19,5 @@ def setup_logging():
     logging.getLogger('openai').setLevel(logging.WARNING)
 
     logger = logging.getLogger(__name__)
-    logger.info("Logging configured. Messages will be saved to app_log.log and shown in console.")
+    logger.info("Logging configured. Messages will be saved to ascendant_vision_ai_platform.log and shown in console.")
     logger.info(f"Log file location: {log_file_path}")

@@ -1,6 +1,6 @@
-# AI-Powered Mortgage Document Screenshot Extractor
+# Ascendant Vision AI Platform
 
-This Windows desktop app lets you capture a region of your screen and analyze the image with OpenAI Vision to extract structured mortgage document data (with confidence scores). Results are shown in a side panel where you can review and edit fields.
+Ascendant Vision AI Platform is a Windows desktop app that lets you capture a region of your screen and analyze the image with OpenAI Vision to extract structured mortgage document data (with confidence scores). Results are shown in a side panel where you can review and edit fields.
 
 No local OCR or Transformers models are used — the analysis is performed via the OpenAI API.
 
@@ -29,7 +29,7 @@ You can provide your API key in either of these ways:
     ```
   - System-wide (Windows): set it in System Properties → Environment Variables.
 - In-app settings: Launch the app and use the Settings button to enter your key. The key is stored in plaintext at:
-  - `~/.mortgage_analyzer_app/settings.json`
+  - `~/.ascendant_vision_ai_platform/settings.json`
 
 Optional environment variable for hotkeys:
 - `HOTKEYS` (comma-separated). Defaults to `ctrl+alt+m,ctrl+alt+a`.
@@ -66,9 +66,9 @@ The single-file executable will be placed under `dist/`.
   - Ensure no other app is using the same hotkey.
 - OpenAI errors (timeouts/rate limits): The app retries with exponential backoff and will display an error in the UI/logs.
 - Results window not visible: Check the taskbar/alt-tab; it snaps to the right half of the screen by default.
-- Logs: See `app_log.log` next to the project root for diagnostic messages.
+- Logs: See `ascendant_vision_ai_platform.log` next to the project root for diagnostic messages.
 
 ## Privacy & Security
 
 - Images of selected screen regions are sent to OpenAI for analysis. Do not capture sensitive data you are not comfortable sending to the API.
-- If you save the API key via Settings, it is stored unencrypted at `~/.mortgage_analyzer_app/settings.json`.
+- If you save the API key via Settings, it is stored unencrypted at `~/.ascendant_vision_ai_platform/settings.json`.
